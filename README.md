@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/screenshots/02-home-running.png" alt="PodSteroid running" width="240"/>
-</p>
-
 <h1 align="center">PodSteroid</h1>
 
 <p align="center">
@@ -70,12 +66,7 @@ open a **remote terminal**, and stitch everything into a **multi-node k3s cluste
 
 ## 🖼️ Screenshots
 
-<p align="center">
-  <img src="docs/screenshots/01-home-idle.png" width="200" alt="Home, idle"/>
-  <img src="docs/screenshots/02-home-running.png" width="200" alt="Home, running"/>
-  <img src="docs/screenshots/03-terminal-fastfetch.png" width="200" alt="Terminal"/>
-  <img src="docs/screenshots/04-quick-settings.png" width="200" alt="Quick settings"/>
-</p>
+> 📷 Screenshots will be added to `docs/screenshots/` (`01-home-idle.png`, `02-home-running.png`, `03-terminal-fastfetch.png`, `04-quick-settings.png`).
 
 ---
 
