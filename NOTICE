@@ -1,0 +1,16 @@
+PodSteroid
+Copyright (C) 2024-2026 Podsteroid contributors
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License version 2 (GPL-2.0) as
+published by the Free Software Foundation. See the LICENSE file for the
+full text.
+
+This project is a further work on ExTV/Podroid
+(https://github.com/ExTV/Podroid), developed by ExTV and released under
+the same GPL-2.0 license. We are grateful to the ExTV/Podroid authors
+for their original work, which this project builds upon.
+
+Individual source files carry their own copyright headers. Where a file
+is derived from ExTV/Podroid, the original GPL-2.0 grant and copyright
+attribution are preserved here and in the project README and CREDITS.md.

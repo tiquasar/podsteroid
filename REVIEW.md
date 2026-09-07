@@ -1,7 +1,7 @@
 # Podsteroid — Remote-Server Feature Review
 
-Verification of every claim in `suggestions.md` against the source at
-`/opt/kubernetes/podroidv2`. Scope: `remote/` and `ui/screens/servers/`.
+Verification of every claim in `suggestions.md` against the source tree.
+Scope: `remote/` and `ui/screens/servers/`.
 
 | Severity | Findings | Verified | Wrong | Nits |
 |---|---|---|---|---|
