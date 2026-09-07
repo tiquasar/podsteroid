@@ -168,12 +168,12 @@ podman run --rm alpine echo "hello from a container"
 docker run -d -p 8080:80 nginx
 
 # expose that container to your phone and LAN, right from the VM shell
-podroid-forward add 8080 8080 tcp
+podsteroid-forward add 8080 8080 tcp
 curl http://<phone-ip>:8080
-podroid-forward clean
+podsteroid-forward clean
 
 # SSH in from your laptop (enable SSH in the setup wizard or Settings)
-ssh root@<phone-ip> -p 9922        # password: podroid
+ssh root@<phone-ip> -p 9922
 ```
 
 ### Remote servers
