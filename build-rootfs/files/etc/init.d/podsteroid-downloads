@@ -1,0 +1,39 @@
+#!/sbin/openrc-run
+description="PodSteroid AVF Downloads share (9p over vsock, AVF only)"
+pidfile="/run/podsteroid-downloads.pid"
+
+depend() {
+    need podsteroid-bootstrap
+    after podsteroid-network podsteroid-vsock
+    before podsteroid-ready
+}
+
+start() {
+    # AVF-only: QEMU's kernel has no AF_VSOCK and already gets its Downloads
+    # share via virtio-9p in podsteroid-bootstrap. Skip cleanly via
+    # mark_service_inactive, same idiom podsteroid-vsock uses.
+    if ! grep -q 'podsteroid\.backend=avf' /proc/cmdline 2>/dev/null; then
+        einfo "Not an AVF boot - skipping podsteroid-downloads"
+        mark_service_inactive
+        return 0
+    fi
+    mkdir -p /mnt/downloads 2>/dev/null
+    ebegin "Starting Downloads 9p rendezvous"
+    start-stop-daemon --start --background \
+        --make-pidfile --pidfile "$pidfile" \
+        --stdout /var/log/podsteroid-downloads.log \
+        --stderr /var/log/podsteroid-downloads.log \
+        --exec /usr/local/bin/podsteroid-vsock-agent -- downloads-9p
+    eend $?
+}
+
+stop() {
+    if [ -f "$pidfile" ]; then
+        ebegin "Stopping Downloads 9p rendezvous"
+        start-stop-daemon --stop --pidfile "$pidfile"
+        rm -f "$pidfile"
+        eend $?
+    fi
+    umount /mnt/downloads 2>/dev/null || true
+    return 0
+}

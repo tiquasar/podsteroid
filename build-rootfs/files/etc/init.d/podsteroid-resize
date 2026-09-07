@@ -1,0 +1,10 @@
+#!/sbin/openrc-run
+description="PodSteroid terminal resize daemon (hvc1 → stty hvc0)"
+command="/usr/local/bin/podsteroid-resize"
+command_background="yes"
+pidfile="/run/podsteroid-resize.pid"
+
+depend() {
+    need podsteroid-bootstrap
+    before podsteroid-ready
+}

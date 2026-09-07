@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+description="PodSteroid guest -> Android host bridge (notify/forward)"
+pidfile="/run/podsteroid-hostd.pid"
+
+depend() {
+    need podsteroid-bootstrap
+    before podsteroid-ready
+}
+
+start() {
+    ebegin "Starting podsteroid-hostd"
+    # Portable logging: busybox start-stop-daemon supports --stdout/--stderr but
+    # Debian's dpkg start-stop-daemon does not, so redirect via sh -c instead.
+    start-stop-daemon --start --background \
+        --make-pidfile --pidfile "$pidfile" \
+        --exec /bin/sh -- -c \
+        "exec /usr/local/bin/podsteroid-hostd >> /var/log/podsteroid-hostd.log 2>&1"
+    eend $?
+}
+
+stop() {
+    if [ -f "$pidfile" ]; then
+        ebegin "Stopping podsteroid-hostd"
+        start-stop-daemon --stop --pidfile "$pidfile"
+        rm -f "$pidfile"
+        eend $?
+    fi
+}

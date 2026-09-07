@@ -1,0 +1,92 @@
+%% PodSteroid — complete application architecture
+%% Mermaid diagram (use a Mermaid viewer / GitHub to render).
+
+graph TB
+
+  %% ── Android app shell ───────────────────────────────────────────────
+  subgraph ANDROID["Android App (com.tiquasar.podsteroid)"]
+    direction TB
+    UI["Compose UI\n(Home, Terminal, Servers, Fleet, X11, Settings, Status)"]
+    NAV["NavGraph\nRoutes.HOME/SERVERS/FLEET/..."]
+    HILT["Hilt DI"]
+    DS["DataStore\n(VmDefinition, Settings, RemoteServer, RemoteVm)"]
+    UI --> NAV
+    HILT --> UI
+    DS --> HILT
+  end
+
+  %% ── Engine layer (local VMs) ───────────────────────────────────────
+  subgraph ENGINE["Local VM Engine (per VM)"]
+    direction TB
+    REG["VmRegistry\n(one VmInstance per VmDefinition)"]
+    INST["VmInstance\n(port-forward diff, host bridge, USB)"]
+    QEMU["QemuEngine (TCG)\nSLIRP + QMP + virtio-console"]
+    AVF["AvfEngine (pKVM)\nDHCP + vsock"]
+    REG --> INST
+    INST --> QEMU
+    INST --> AVF
+  end
+
+  %% ── Local guest ────────────────────────────────────────────────────
+  subgraph LOCALGUEST["Local Guest (Alpine squashfs + ext4 overlay, OpenRC)"]
+    direction TB
+    CRT["Container runtimes\npodman / docker / lxc / k3s"]
+    HB["podsteroid-hostd\n(hvc2 / vsock :9101)"]
+    NET["podsteroid-netinfo\nNETINFO push"]
+    CRT --> HB
+    NET --> HB
+  end
+
+  %% ── Host bridge (local guest -> Android) ───────────────────────────
+  BRIDGE["HostRequestServer / Dispatcher\nnotify + NETINFO + port-forward"]
+  HB -. "host bridge" .-> BRIDGE
+  BRIDGE --> ANDROID
+
+  %% ── Remote management (NEW) ────────────────────────────────────────
+  subgraph REMOTE["Remote Server Management (NEW)"]
+    direction TB
+    SS["SecretStore\n(Keystore AES/GCM)"]
+    SC["SshClient\n(exec + shell + HostKey pinning)"]
+    MGR["RemoteServerManager\n@Singleton"]
+    LIB["LibvirtRemoteProvider\n(virsh / virt-install / cloud-init)"]
+    SS --> MGR
+    SC --> MGR
+    MGR --> LIB
+  end
+
+  subgraph LIBVIRTHOST["Remote libvirt/KVM Host (user's machine)"]
+    direction TB
+    HV["hypervisor\n(qemu-kvm)"]
+    RGUEST["Remote Guests\n(k3s nodes, Tailscale)"]
+    HV --> RGUEST
+  end
+
+  LIB == "SSH 22" ==> LIBVIRTHOST
+  MGR == "SSH (guest root)" ==> RGUEST
+
+  %% ── Fleet + clustering (NEW) ───────────────────────────────────────
+  subgraph FLEET["Fleet + k3s Clustering (NEW)"]
+    direction TB
+    FVM["FleetViewModel\n(local + remote -> FleetEntry)"]
+    FSC["FleetScreen / ClusterDialog"]
+    SCRIPT["setup-k3s-agent.sh\n(embedded res/raw)"]
+    TS["Tailscale mesh\n(control + agent nodes)"]
+    FVM --> FSC
+    FSC --> SCRIPT
+    SCRIPT --> TS
+  end
+
+  ANDROID --> FVM
+  MGR --> FVM
+  REG --> FVM
+  TS ==> RGUEST
+  TS -. "guest reachable IP" .-> FVM
+
+  %% ── Local terminal / X11 ───────────────────────────────────────────
+  TERM["Terminal (Termux JNI)\n+ RemoteTerminalDialog (SSH)"]
+  X11["X11 / VNC viewer"]
+  UI --> TERM
+  UI --> X11
+
+  classDef new fill:#1E1E1E,stroke:#2196F3,color:#E3E3E3;
+  class SS,SC,MGR,LIB,FVM,FSC,SCRIPT,REMOTE,FLEET new;

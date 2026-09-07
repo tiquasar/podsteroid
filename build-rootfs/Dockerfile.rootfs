@@ -1,0 +1,63 @@
+# build-rootfs/Dockerfile.rootfs
+
+# ── Stage 1: cross-compile podsteroid-vsock-agent (musl-static aarch64) ────────
+# Uses qemu-user under the hood — no separate cross-toolchain needed.
+FROM --platform=linux/arm64 alpine:3.24 AS vsock-builder
+RUN apk add --no-cache musl-dev gcc make linux-headers
+WORKDIR /work
+COPY vsock-agent /work/vsock-agent
+RUN cd /work/vsock-agent && make CC=gcc
+COPY host-bridge /work/host-bridge
+RUN cd /work/host-bridge && make CC=gcc
+COPY overlay-normalize /work/overlay-normalize
+RUN cd /work/overlay-normalize && make CC=gcc
+
+# ── Stage 2: build the Alpine rootfs squashfs ───────────────────────────────
+FROM alpine:3.24 AS builder
+
+ARG ALPINE_RELEASE=3.24.1
+ARG ALPINE_ARCH=aarch64
+
+RUN apk add --no-cache curl squashfs-tools tar openssl libcap-utils
+
+WORKDIR /work
+RUN curl -L -o minirootfs.tar.gz \
+    "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_RELEASE%.*}/releases/${ALPINE_ARCH}/alpine-minirootfs-${ALPINE_RELEASE}-${ALPINE_ARCH}.tar.gz" \
+ && mkdir rootfs \
+ && tar -xzf minirootfs.tar.gz -C rootfs \
+ && rm minirootfs.tar.gz
+
+# Pull in the vsock-agent binary built in stage 1.
+COPY --from=vsock-builder /work/vsock-agent/podsteroid-vsock-agent /work/rootfs/usr/local/bin/podsteroid-vsock-agent
+COPY --from=vsock-builder /work/host-bridge/podsteroid-hostd /work/rootfs/usr/local/bin/podsteroid-hostd
+COPY --from=vsock-builder /work/overlay-normalize/podsteroid-overlay-normalize /work/rootfs/usr/local/bin/podsteroid-overlay-normalize
+
+# Pre-bake k3s + kubectl so the in-app cluster feature (K3s) works without a
+# runtime download — the guest network is SLIRP + public DNS only, and the
+# get.k3s.io installer can be slow or blocked. Both are static binaries that
+# run on Alpine's musl userspace.
+ARG K3S_VERSION=v1.29.4+k3s1
+RUN mkdir -p /work/rootfs/usr/local/bin \
+    && curl -L -o /work/rootfs/usr/local/bin/k3s \
+        "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION}/k3s" \
+    && chmod +x /work/rootfs/usr/local/bin/k3s
+ARG KUBECTL_VERSION=v1.29.4
+RUN curl -L -o /work/rootfs/usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl" \
+    && chmod +x /work/rootfs/usr/local/bin/kubectl
+
+ARG SYSTEM_VERSION=0
+ENV SYSTEM_VERSION=${SYSTEM_VERSION}
+
+ENV ALPINE_VERSION=${ALPINE_RELEASE}
+COPY files /work/files
+COPY build-rootfs.sh /work/build-rootfs.sh
+RUN chmod +x /work/build-rootfs.sh && /work/build-rootfs.sh
+
+RUN mksquashfs /work/rootfs /work/alpine-rootfs.squashfs \
+    -comp zstd -Xcompression-level 19 -all-root -noappend
+# (No -no-xattrs: rootless podman's newuidmap/newgidmap need their
+# file capabilities preserved; they're stored as security.capability xattr.)
+
+FROM scratch AS export
+COPY --from=builder /work/alpine-rootfs.squashfs /alpine-rootfs.squashfs

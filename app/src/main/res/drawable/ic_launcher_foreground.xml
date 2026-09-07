@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Blue badge -->
+    <path android:fillColor="#2F6BFF"
+        android:pathData="M54,8 C80.5,8 100,27.5 100,54 C100,80.5 80.5,100 54,100 C27.5,100 8,80.5 8,54 C8,27.5 27.5,8 54,8 Z"/>
+    <!-- White container/pod mark (symmetrical) -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M38,38 h32 a8,8 0 0 1 8,8 v20 a8,8 0 0 1 -8,8 h-32 a8,8 0 0 1 -8,-8 v-20 a8,8 0 0 1 8,-8 Z"/>
+</vector>

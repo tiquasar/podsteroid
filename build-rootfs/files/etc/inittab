@@ -1,0 +1,10 @@
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+# Two gettys are declared, but only one starts per boot — see /usr/local/bin/podsteroid-getty:
+# the wrapper reads `podsteroid.tty=` from the kernel cmdline and sleeps the wrong tty
+# instead of running getty there. This keeps the squashfs backend-agnostic.
+hvc0::respawn:/usr/local/bin/podsteroid-getty hvc0
+ttyS0::respawn:/usr/local/bin/podsteroid-getty ttyS0
+::shutdown:/sbin/openrc shutdown

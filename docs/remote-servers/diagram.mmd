@@ -1,0 +1,47 @@
+flowchart TB
+    subgraph App[PodSteroid Android app]
+        direction TB
+        UI["UI: HomeScreen / ServersScreen / FleetScreen / RemoteTerminalDialog"]
+        VM["ViewModels (Hilt)\nServersViewModel · FleetViewModel"]
+        DOM["Domain / Orchestration"]
+        subgraph DOMD[ ]
+            RSM["RemoteServerManager"]
+            REPO["RemoteServerRepository\nRemoteVmRepository (DataStore)"]
+            SEC["SecretStore\n(Android Keystore AES/GCM)"]
+            PROV["LibvirtRemoteProvider\n(pure parsers + cmd builders + exec)"]
+            SSH["SshClient (JSch)\nexec + shell + HostKeyStore"]
+        end
+        LOCAL["VmRegistry.allStates\n(local VM states)"]
+        HB["HostProtocol.NETINFO\n(guest → app push)"]
+    end
+
+    subgraph Remote[Remote libvirt/KVM server]
+        VIRSH["virsh · virt-install · qemu-img"]
+        subgraph GuestR[Guest VM]
+            CI["cloud-init\n(docker / k3s / tailscaled)\nroot:podsteroid"]
+            TS1["Tailscale IP"]
+        end
+    end
+
+    subgraph Phone[Local VM]
+        QEMU["QEMU/AVF guest (Alpine)\nSLIRP/DHCP — no routable IP"]
+    end
+
+    UI --> VM --> RSM
+    RSM --> SEC
+    RSM --> REPO
+    RSM --> PROV
+    PROV --> SSH
+    VM --> LOCAL
+    VM --> HB
+
+    SSH -. "SSH port 22\n(accept-first-use host keys)" .-> VIRSH
+    VIRSH --> GuestR
+    GuestR --> TS1
+    TS1 -. "tailscale ip -4 (fetched via SSH)" .-> RSM
+    HB -. "NETINFO push (guest rootfs TODO)" .-> LOCAL
+
+    TS1 --- MESH{{"Tailscale mesh\n(encrypted, NAT-traversing)"}}
+    QEMU --- MESH
+
+    MESH -. "remote terminal + k3s join" .-> UI

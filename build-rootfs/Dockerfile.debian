@@ -1,0 +1,61 @@
+# build-rootfs/Dockerfile.debian
+#
+# Builds a Debian (minbase) + OpenRC guest rootfs, reusing the exact same
+# podsteroid-* OpenRC service layer and host-bridge/vsock binaries as Alpine.
+#
+# Why it boots: busybox `init` (PID 1, symlinked to /sbin/init) reads the
+# shared /etc/inittab, which delegates runlevels to openrc and spawns getty
+# on hvc0 — identical to the Alpine model. The binaries from vsock-builder
+# are musl-static, so they run unmodified on glibc Debian.
+
+# ── Stage 1: cross-compile the static guest C binaries (musl-static aarch64) ──
+FROM --platform=linux/arm64 alpine:3.24 AS vsock-builder
+RUN apk add --no-cache musl-dev gcc make linux-headers
+WORKDIR /work
+COPY vsock-agent /work/vsock-agent
+RUN cd /work/vsock-agent && make CC=gcc
+COPY host-bridge /work/host-bridge
+RUN cd /work/host-bridge && make CC=gcc
+COPY overlay-normalize /work/overlay-normalize
+RUN cd /work/overlay-normalize && make CC=gcc
+
+# ── Stage 2: build the Debian rootfs squashfs ────────────────────────────────
+# Run as arm64 so debootstrap + apt operate natively (emulated by the host
+# binfmt/qemu). This avoids the fragile debootstrap --foreign/second-stage dance.
+FROM --platform=linux/arm64 debian:bookworm AS builder
+
+ARG SYSTEM_VERSION=0
+ENV SYSTEM_VERSION=${SYSTEM_VERSION}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        debootstrap squashfs-tools curl ca-certificates openssl
+
+WORKDIR /work
+RUN debootstrap bookworm rootfs http://deb.debian.org/debian
+
+COPY files /work/files
+# Static musl guest binaries from stage 1 (run unmodified on glibc Debian).
+COPY --from=vsock-builder /work/vsock-agent/podsteroid-vsock-agent /work/rootfs/usr/local/bin/podsteroid-vsock-agent
+COPY --from=vsock-builder /work/host-bridge/podsteroid-hostd /work/rootfs/usr/local/bin/podsteroid-hostd
+COPY --from=vsock-builder /work/overlay-normalize/podsteroid-overlay-normalize /work/rootfs/usr/local/bin/podsteroid-overlay-normalize
+
+# Pre-bake k3s + kubectl so the in-app cluster feature (K3s) works without a
+# runtime download. Static binaries; run unmodified on glibc Debian.
+ARG K3S_VERSION=v1.29.4+k3s1
+RUN mkdir -p /work/rootfs/usr/local/bin \
+    && curl -L -o /work/rootfs/usr/local/bin/k3s \
+        "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION}/k3s" \
+    && chmod +x /work/rootfs/usr/local/bin/k3s
+ARG KUBECTL_VERSION=v1.29.4
+RUN curl -L -o /work/rootfs/usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl" \
+    && chmod +x /work/rootfs/usr/local/bin/kubectl
+
+COPY build-debian-rootfs.sh /work/build-debian-rootfs.sh
+RUN chmod +x /work/build-debian-rootfs.sh && /work/build-debian-rootfs.sh
+
+RUN mksquashfs /work/rootfs /work/debian-rootfs.squashfs \
+    -comp zstd -Xcompression-level 19 -all-root -noappend
+
+FROM scratch AS export
+COPY --from=builder /work/debian-rootfs.squashfs /debian-rootfs.squashfs

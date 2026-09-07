@@ -1,0 +1,16 @@
+#!/bin/sh
+# Write Podman container count for the Android app (Downloads/PodSteroid/container-count).
+set -eu
+
+count=0
+if command -v podman >/dev/null 2>&1; then
+	count="$(podman ps -aq 2>/dev/null | wc -l | tr -d ' ')"
+fi
+
+mkdir -p /var/lib/podsteroid
+printf '%s\n' "$count" > /var/lib/podsteroid/container-count
+
+if mountpoint -q /mnt/downloads 2>/dev/null; then
+	mkdir -p /mnt/downloads/PodSteroid
+	printf '%s\n' "$count" > /mnt/downloads/PodSteroid/container-count
+fi

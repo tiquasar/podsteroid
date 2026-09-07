@@ -1,0 +1,68 @@
+#!/bin/sh
+set -e
+
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <MASTER_URL> <K3S_TOKEN>"
+    exit 1
+fi
+
+MASTER="$1"
+TOKEN="$2"
+
+echo "==> Installing K3s agent binary..."
+curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_START=true K3S_URL="$MASTER" K3S_TOKEN="$TOKEN" INSTALL_K3S_EXEC="agent --node-name podsteroid --snapshotter=fuse-overlayfs" sh -
+
+echo "==> Configuring K3s..."
+mkdir -p /etc/rancher/k3s
+
+cat > /etc/rancher/k3s/k3s-agent.env <<EOF
+K3S_URL=$MASTER
+K3S_TOKEN=$TOKEN
+EOF
+
+echo "==> Removing stale node identity..."
+rm -f /etc/rancher/node/password
+rm -f /var/lib/rancher/k3s/agent/serving-kubelet.crt
+
+echo "==> Creating OpenRC service..."
+
+cat > /etc/init.d/k3s-agent <<'EOF'
+#!/sbin/openrc-run
+
+depend() {
+    after network-online
+    want cgroups
+}
+
+start_pre() {
+    rm -f /tmp/k3s.*
+}
+
+supervisor=supervise-daemon
+name=k3s-agent
+command="/usr/local/bin/k3s"
+command_args="agent --node-name podsteroid --snapshotter=fuse-overlayfs"
+
+output_log=/var/log/k3s-agent.log
+error_log=/var/log/k3s-agent.log
+
+pidfile="/var/run/k3s-agent.pid"
+respawn_delay=5
+respawn_max=0
+
+set -o allexport
+if [ -f /etc/environment ]; then . /etc/environment; fi
+if [ -f /etc/rancher/k3s/k3s-agent.env ]; then . /etc/rancher/k3s/k3s-agent.env; fi
+set +o allexport
+EOF
+
+chmod +x /etc/init.d/k3s-agent
+
+echo "==> Checking service syntax..."
+sh -n /etc/init.d/k3s-agent
+
+echo "==> Starting K3s agent..."
+rc-service k3s-agent restart
+rc-update add k3s-agent default 2>/dev/null || true
+
+echo "==> Done."
